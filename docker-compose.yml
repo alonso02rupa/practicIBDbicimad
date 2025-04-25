@@ -26,7 +26,7 @@ services:
     restart: on-failure
     entrypoint: >
       /bin/sh -c "
-      until /usr/bin/mc config host add minio http://minio:9000 minioadmin minioadmin; do
+      until /usr/bin/mc config host add minio http://minioprac2:9000 minioadmin minioadmin; do
         echo 'Waiting for MinIO to be ready...'
         sleep 1
       done;
