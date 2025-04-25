@@ -7,6 +7,16 @@ Raw Ingestion Zone: Where data is stored in its original format without modifica
 import pandas as pd
 import os
 from utils import upload_dataframe_to_minio, get_minio_client
+from minio import Minio
+
+def get_minio_client():
+    client = Minio(
+        "minio:9000",  # Correcto, coincide con el nombre del servicio en docker-compose.yml
+        access_key="minioadmin",
+        secret_key="minioadmin",
+        secure=False  # No es necesario usar HTTPS en este caso, ya que es HTTP
+    )
+    return client
 
 def main():
     # Save sample data to local CSV files
@@ -15,7 +25,7 @@ def main():
 
     trafico_path = data_dir + "/trafico-horario.csv"
     usos_path = data_dir + "/bicimad-usos.csv"
-    aparcamiento_path = data_dir + "/parkings_rotacion.csv"
+    aparcamiento_path = data_dir + "/parkings-rotacion.csv"
 
     # Cargar los DataFrames desde los archivos CSV
     trafico_df = pd.read_csv(trafico_path)
