@@ -14,6 +14,6 @@ De la tabla distritos utilizaremos las columnas: id, nombre, densidad_poblacion.
 De la tabla estaciones_transporte utilizaremos las columnas: distrito_id, tipo.  
 
 ## Objectivo 3:
-Hacer visualizaciones de la variación diaria (por horas) de ocupación de parkings de Madrid a través de  un join de parkings-rotacion.csv y ext_aparcamientos_info.csv por la columna aparcamniento_id. En este último csv hemos añadido a mano en qué distrito se encuentra cada parking para luego analizar los distritos con parkings más llenos.  
-De parkings-rotacion.csv utilizaremos las columnas: aparcamiento_id,	hora,	plazas_ocupadas.  
-De ext_aparcamientos_info.csv nos quedamos con las columnas: aparcamiento_id, capacidad_total, distrito_id, nombre_distrito.  
+Hacer visualizaciones de la variación diaria (por horas) de ocupación de parkings de Madrid a través de  un join de parkings-rotacion.csv y ext_aparcamientos_info.csv por la columna aparcamiento_id. En este último csv hemos añadido a mano en qué distrito se encuentra cada parking para luego analizar los distritos con parkings más llenos.  
+De parkings-rotacion.csv utilizaremos las columnas: aparcamiento_id, fecha,	hora,	plazas_ocupadas.  
+De ext_aparcamientos_info.csv nos quedamos con las columnas: aparcamiento_id, capacidad_total, distrito_id, nombre_distrito. (las dos ultimas se han añadido a mano)
