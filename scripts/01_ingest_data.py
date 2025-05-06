@@ -26,11 +26,13 @@ def main():
     trafico_path = data_dir + "/trafico-horario.csv"
     usos_path = data_dir + "/bicimad-usos.csv"
     aparcamiento_path = data_dir + "/parkings-rotacion.csv"
+    ext_aparcamiento_path = data_dir + "/ext_aparcamientos_info.csv"
 
     # Cargar los DataFrames desde los archivos CSV
     trafico_df = pd.read_csv(trafico_path)
     usos_df = pd.read_csv(usos_path)
     aparcamiento_df = pd.read_csv(aparcamiento_path)
+    ext_aparcamiento_df = pd.read_csv(ext_aparcamiento_path)
 
     # Metadatos para cada dataset
     trafico_metadata = {
@@ -61,11 +63,37 @@ def main():
         "porcentaje_ocupacion": "Porcentaje de ocupación del aparcamiento en esa hora específica. Se calcula como (plazas_ocupadas / (plazas_ocupadas + plazas_libres)) * 100."
     }
 
-    # Subir los datos a MinIO
+    ext_aparcamiento_metadata = {
+        "aparcamiento_id": "Identificador del aparcamiento. Es un número entero que distingue cada aparcamiento de forma única.",
+        "nombre": "Nombre del aparcamiento",
+        "dirección": "Dirección física de la boca del aparcamiento",
+        "capacidad_total": "Total de plazas de cualquier tipo localizadas en el aparcamiento",
+        "plazas_movilidad_reducida": "Número de plazas para gente con movilidad reducida",
+        "plazas_vehiculos_electricos": "Número de plazas con cargador incorporado",
+        "tarifo_hora_euros": "Cantidad monetaria que cuesta mantener el coche en una plaza en euros",
+        "horario": "Disponibilidad del aparcamiento",
+        "latitud": "Latitud de la boca del aparcamiento",
+        "longitud": "Longitud de la boca del aparcamiento"
+    }
+
+    # Subir los datos a MinIO, incluyendo el SQL
+    # Subir el archivo SQL a MinIO desde la misma ruta
+    dump_sql_path = os.path.join(data_dir, "dump-bbdd-municipal.sql")
+    if os.path.exists(dump_sql_path):
+        with open(dump_sql_path, 'rb') as file_data:
+            client = get_minio_client()
+            client.put_object(
+                bucket_name='raw-ingestion-zone',
+                object_name='sql/dump-bbdd-municipal.sql',
+                data=file_data,
+                length=os.path.getsize(dump_sql_path),
+                content_type='application/sql'
+            )
+
     upload_dataframe_to_minio(trafico_df, 'raw-ingestion-zone', 'trafico/trafico-horario.csv', metadata=trafico_metadata)
     upload_dataframe_to_minio(usos_df, 'raw-ingestion-zone', 'bicimad/bicimad-usos.csv', metadata=usos_metadata)
     upload_dataframe_to_minio(aparcamiento_df, 'raw-ingestion-zone', 'aparcamiento/parkings_rotacion.csv', metadata=aparcamiento_metadata)
-
+    upload_dataframe_to_minio(ext_aparcamiento_df, 'raw-ingestion-zone', 'aparcamiento/ext_aparcamientos_info.csv', metadata=ext_aparcamiento_metadata)
     # Verificar los archivos en el bucket
     client = get_minio_client()
     print("\nVerifying uploaded files in raw-ingestion-zone:")

@@ -1,284 +1,283 @@
 """
-This script demonstrates data transformation and enrichment in the process zone of the data lake.
-It reads data from the raw-ingestion-zone, performs transformations, and writes to the process-zone.
-
-Process Zone: Where data is prepared and transformed according to business needs.
+Script para la Process Zone del Data Lake (modificado para evitar download_file_as_string_from_minio).
+Lee datos desde la raw-ingestion-zone, realiza procesamiento (limpieza, estandarización),
+y los sube a la process-zone en formato Parquet.
 """
+
 from utils import (
     download_dataframe_from_minio,
     upload_dataframe_to_minio,
-    log_data_transformation,
-    validate_data_quality
+    log_data_transformation
 )
 import pandas as pd
-import numpy as np
+import pyarrow.parquet as pq
+import pyarrow as pa
+import sqlite3
+from pathlib import Path
+import re
+from minio import Minio
+import io
 
-def standardize_transaction_data(df):
-    """Standardize and clean transaction data."""
-    # Make a copy to avoid modifying the original
-    processed_df = df.copy()
+# --- Funciones de procesamiento ---
 
-    # Convert date string to datetime if needed
-    if not pd.api.types.is_datetime64_any_dtype(processed_df['transaction_date']):
-        processed_df['transaction_date'] = pd.to_datetime(processed_df['transaction_date'])
+# Función para limpiar cadenas y manejar codificación
+def clean_text_column(text):
+    if isinstance(text, str):
+        # Reemplazar caracteres no válidos con un carácter de reemplazo
+        return text.encode('utf-8', errors='replace').decode('utf-8')
+    return text
 
-    # Extract date components for analysis
-    processed_df['year'] = processed_df['transaction_date'].dt.year
-    processed_df['month'] = processed_df['transaction_date'].dt.month
-    processed_df['day'] = processed_df['transaction_date'].dt.day
-    processed_df['day_of_week'] = processed_df['transaction_date'].dt.dayofweek
+# Objetivo 1: Procesamiento de datos de tráfico
+def column_clean_traffic(df):
+    df.drop(columns=['sensor_id', 'velocidad_media_kmh'], inplace=True, errors='ignore')
 
-    # Standardize payment methods
-    payment_method_mapping = {
-        'credit_card': 'Credit Card',
-        'credit card': 'Credit Card',
-        'creditcard': 'Credit Card',
-        'debit_card': 'Debit Card',
-        'debit card': 'Debit Card',
-        'debitcard': 'Debit Card',
-        'cash': 'Cash',
-        'digital_wallet': 'Digital Wallet',
-        'digital wallet': 'Digital Wallet',
-        'digitalwallet': 'Digital Wallet'
-    }
-    processed_df['payment_method'] = processed_df['payment_method'].map(payment_method_mapping)
+def date_format_traffic(df):
+    df['hora'] = df['fecha_hora'].apply(lambda x: pd.to_datetime(x, format='%Y-%m-%d %H:%M:%S').time())
+    df.drop(columns=['fecha_hora'], inplace=True, errors='ignore')
 
-    # Categorize transactions by amount
-    def categorize_amount(amount):
-        if amount < 20:
-            return 'Low'
-        elif amount < 50:
-            return 'Medium'
-        else:
-            return 'High'
+# Objetivo 2: Procesamiento de datos de BiciMAD
+def column_clean_bicimad(df):
+    df.drop(columns=['usuario_id', 'fecha_hora_inicio', 'fecha_hora_fin', 'duracion_segundos', 'distancia_km',
+                     'calorias_estimadas', 'co2_evitado_gramos'], inplace=True, errors='ignore')
 
-    processed_df['amount_category'] = processed_df['amount'].apply(categorize_amount)
+# Objetivo 3: Procesamiento de datos de parkings
+def column_clean_parkings(df):
+    df.drop(columns=['plazas_libres', 'porcentaje_ocupacion'], inplace=True, errors='ignore')
 
-    return processed_df
+def column_clean_ext(df):
+    df.drop(columns=['nombre', 'direccion', 'plazas_movilidad_reducida', 'plazas_vehiculos_electricos',
+                     'horario', 'tarifa_hora_euros', 'latitud', 'longitud'], inplace=True, errors='ignore')
 
-def enrich_customer_data(df):
-    """Enrich and standardize customer data."""
-    # Make a copy to avoid modifying the original
-    processed_df = df.copy()
+# Procesamiento de scripts SQL
+def preprocess_sql_script(script):
+    script = script.replace("'Donnell", "''Donnell")  # Escapar comillas en "O'Donnell"
+    # Reemplazar caracteres problemáticos
+    script = script.encode('utf-8', errors='replace').decode('utf-8')
+    return script
 
-    # Convert date string to datetime if needed
-    if not pd.api.types.is_datetime64_any_dtype(processed_df['signup_date']):
-        processed_df['signup_date'] = pd.to_datetime(processed_df['signup_date'])
+def download_sql_file(bucket_name: str, object_name: str, local_path: str):
+    """
+    Descarga un archivo SQL desde MinIO y lo guarda en disco.
 
-    # Calculate customer tenure in days
-    processed_df['tenure_days'] = (pd.Timestamp('2024-01-01') - processed_df['signup_date']).dt.days
+    Args:
+        bucket_name (str): Nombre del bucket en MinIO.
+        object_name (str): Ruta del objeto en el bucket.
+        local_path (str): Ruta local donde guardar el archivo.
+    """
+    try:
+        client = Minio(
+            endpoint="minio:9000",
+            access_key="minioadmin",
+            secret_key="minioadmin",
+            secure=False
+        )
+        client.fget_object(bucket_name, object_name, local_path)
+    except Exception as e:
+        raise Exception(f"Error downloading {object_name} from {bucket_name}: {e}")
 
-    # Group customers by tenure
-    def tenure_group(days):
-        if days < 90:
-            return 'New'
-        elif days < 365:
-            return 'Regular'
-        else:
-            return 'Loyal'
+def main_process_zone():
+    print("Starting data processing for Process Zone...")
 
-    processed_df['customer_segment'] = processed_df['tenure_days'].apply(tenure_group)
-
-    # Standardize country names
-    country_mapping = {
-        'USA': 'United States',
-        'US': 'United States',
-        'U.S.A.': 'United States',
-        'UK': 'United Kingdom',
-        'U.K.': 'United Kingdom'
-    }
-    processed_df['country'] = processed_df['country'].map(lambda x: country_mapping.get(x, x))
-
-    # Add geographic region
-    region_mapping = {
-        'United States': 'North America',
-        'Canada': 'North America',
-        'United Kingdom': 'Europe',
-        'Germany': 'Europe',
-        'France': 'Europe'
-    }
-    processed_df['region'] = processed_df['country'].map(region_mapping)
-
-    return processed_df
-
-def standardize_product_data(df):
-    """Standardize and enrich product data."""
-    # Make a copy to avoid modifying the original
-    processed_df = df.copy()
-
-    # Standardize categories
-    processed_df['category'] = processed_df['category'].str.title()
-
-    # Add product tier based on price
-    def price_tier(price):
-        if price < 20:
-            return 'Budget'
-        elif price < 50:
-            return 'Standard'
-        else:
-            return 'Premium'
-
-    processed_df['price_tier'] = processed_df['price'].apply(price_tier)
-
-    # Convert boolean to string for consistency
-    processed_df['availability'] = processed_df['in_stock'].map({True: 'In Stock', False: 'Out of Stock'})
-
-    return processed_df
-
-def create_transaction_product_view(transactions_df, products_df):
-    """Create a joined view of transactions and products."""
-    # Merge transactions with product information
-    merged_df = pd.merge(
-        transactions_df,
-        products_df[['product_id', 'product_name', 'category', 'price_tier']],
-        on='product_id',
-        how='left'
-    )
-
-    # Add some calculated fields
-    merged_df['month_year'] = merged_df['transaction_date'].dt.strftime('%Y-%m')
-
-    return merged_df
-
-def main():
-    print("Starting data processing stage...")
-
-    # 1. Download data from raw-ingestion-zone
+    # 1. Descargar datos desde raw-ingestion-zone
     print("\nDownloading data from raw-ingestion-zone...")
     try:
-        transactions_df = download_dataframe_from_minio('raw-ingestion-zone', 'sales/transactions.csv')
-        customers_df = download_dataframe_from_minio('raw-ingestion-zone', 'crm/customers.csv')
-        products_df = download_dataframe_from_minio('raw-ingestion-zone', 'inventory/products.csv')
-        print(f"Downloaded {len(transactions_df)} transactions, {len(customers_df)} customers, {len(products_df)} products")
+        trafico_df = download_dataframe_from_minio('raw-ingestion-zone', 'trafico/trafico-horario.csv')
+        bicimad_df = download_dataframe_from_minio('raw-ingestion-zone', 'bicimad/bicimad-usos.csv')
+        parkings_df = download_dataframe_from_minio('raw-ingestion-zone', 'aparcamiento/parkings_rotacion.csv')
+        ext_df = download_dataframe_from_minio('raw-ingestion-zone', 'aparcamiento/ext_aparcamientos_info.csv')
+        # Descargar SQL como archivo temporal
+        sql_temp_path = "temp_dump-bbdd-municipal.sql"
+        download_sql_file('raw-ingestion-zone', 'sql/dump-bbdd-municipal.sql', sql_temp_path)
+        with open(sql_temp_path, 'r', encoding='iso-8859-1') as f:  # Usar ISO-8859-1 explícitamente
+            municipal_sql = f.read()
+        print("Data downloaded successfully")
     except Exception as e:
         print(f"Error downloading data: {e}")
         return
 
-    # 2. Process and transform the data
-    print("\nTransforming data...")
+    # 2. Procesar datos
+    print("\nProcessing data...")
 
-    # Process transactions
-    processed_transactions = standardize_transaction_data(transactions_df)
-    print("Transaction data processed and standardized")
+    # Tráfico
+    column_clean_traffic(trafico_df)
+    date_format_traffic(trafico_df)
+    # Limpiar columnas de texto
+    for col in trafico_df.select_dtypes(include=['object']).columns:
+        trafico_df[col] = trafico_df[col].apply(clean_text_column)
+    print("Traffic data cleaned and formatted")
 
-    # Validate transaction data quality
-    transaction_rules = {
-        'no_nulls': ['transaction_id', 'customer_id', 'product_id', 'amount', 'payment_method'],
-        'unique': ['transaction_id']
-    }
-    validate_data_quality(processed_transactions, 'processed_transactions', transaction_rules)
+    # BiciMAD
+    column_clean_bicimad(bicimad_df)
+    for col in bicimad_df.select_dtypes(include=['object']).columns:
+        bicimad_df[col] = bicimad_df[col].apply(clean_text_column)
+    print("Bicimad data cleaned")
 
-    # Process customers
-    processed_customers = enrich_customer_data(customers_df)
-    print("Customer data processed and enriched")
+    # Parkings
+    column_clean_parkings(parkings_df)
+    column_clean_ext(ext_df)
+    for col in parkings_df.select_dtypes(include=['object']).columns:
+        parkings_df[col] = parkings_df[col].apply(clean_text_column)
+    for col in ext_df.select_dtypes(include=['object']).columns:
+        ext_df[col] = ext_df[col].apply(clean_text_column)
+    print("Parking data cleaned")
 
-    # Validate customer data quality
-    customer_rules = {
-        'no_nulls': ['customer_id', 'email'],
-        'unique': ['customer_id', 'email']
-    }
-    validate_data_quality(processed_customers, 'processed_customers', customer_rules)
+    # Municipal (SQL)
+    SQL_FILE = "dump-bbdd-municipal.sql"
+    PROCESSED_DATA_PATH = "processed_sql"
+    DB_PATH = "temp.db"
+    Path(PROCESSED_DATA_PATH).mkdir(parents=True, exist_ok=True)
+    TABLES_TO_SAVE = {"distritos", "estaciones_transporte"}
 
-    # Process products
-    processed_products = standardize_product_data(products_df)
-    print("Product data processed and standardized")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        sql_script = preprocess_sql_script(municipal_sql)
+        cursor.executescript(sql_script)
+        conn.commit()
 
-    # Validate product data quality
-    product_rules = {
-        'no_nulls': ['product_id', 'product_name', 'category'],
-        'unique': ['product_id']
-    }
-    validate_data_quality(processed_products, 'processed_products', product_rules)
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = [row[0] for row in cursor.fetchall()]
+        print(f"Tablas creadas: {tables}")
 
-    # Create transaction-product view
-    transaction_product_view = create_transaction_product_view(processed_transactions, processed_products)
-    print("Created transaction-product integrated view")
+        # Procesar tablas
+        if "distritos" in tables:
+            df_distritos = pd.read_sql_query("SELECT * FROM distritos", conn)
+            df_distritos = df_distritos[['id', 'nombre', 'densidad_poblacion']]
+            # Limpiar columnas de texto
+            for col in df_distritos.select_dtypes(include=['object']).columns:
+                df_distritos[col] = df_distritos[col].apply(clean_text_column)
+            df_distritos.to_parquet(f"{PROCESSED_DATA_PATH}/distritos.parquet", index=False, engine='pyarrow')
+            print("Tabla distritos limpiada y guardada")
+        else:
+            print("Tabla distritos no encontrada")
+            conn.close()
+            return
 
-    # 3. Upload to process-zone in Parquet format (columnar storage for better performance)
+        if "estaciones_transporte" in tables:
+            df_estaciones = pd.read_sql_query("SELECT * FROM estaciones_transporte", conn)
+            df_estaciones = df_estaciones[['distrito_id', 'tipo']]
+            # Limpiar columnas de texto
+            for col in df_estaciones.select_dtypes(include=['object']).columns:
+                df_estaciones[col] = df_estaciones[col].apply(clean_text_column)
+            df_estaciones.to_parquet(f"{PROCESSED_DATA_PATH}/estaciones_transporte.parquet", index=False, engine='pyarrow')
+            print("Tabla estaciones_transporte limpiada y guardada")
+        else:
+            print("Tabla estaciones_transporte no encontrada")
+            conn.close()
+            return
+
+        conn.close()
+
+    except sqlite3.OperationalError as e:
+        print(f"Error al ejecutar el script SQL: {e}")
+        lines = sql_script.splitlines()
+        print("\nÚltimas líneas del script ejecutado:")
+        print('\n'.join(lines[max(0, len(lines)-10):]))
+        conn.close()
+        return
+
+    # 3. Subir datos procesados a process-zone
     print("\nUploading processed data to process-zone...")
+    try:
+        # Tráfico
+        upload_dataframe_to_minio(
+            trafico_df,
+            'process-zone',
+            'trafico/cleaned_traffic.parquet',
+            format='parquet',
+            metadata={
+                'description': 'Cleaned and formatted traffic data',
+                'primary_keys': [],
+                'transformations': 'Dropped unnecessary columns, formatted date and time, cleaned text encoding'
+            }
+        )
+        log_data_transformation(
+            'raw-ingestion-zone', 'trafico-horarios.csv',
+            'process-zone', 'trafico/cleaned_traffic.parquet',
+            'Traffic data cleaned and converted to Parquet'
+        )
 
-    # Upload processed transactions
-    transaction_meta = {
-        'description': 'Standardized transaction data with derived fields',
-        'primary_keys': ['transaction_id'],
-        'foreign_keys': ['customer_id', 'product_id'],
-        'transformations': 'Added date components, standardized payment methods, added amount categories'
-    }
-    upload_dataframe_to_minio(
-        processed_transactions,
-        'process-zone',
-        'sales/transactions.parquet',
-        format='parquet',
-        metadata=transaction_meta
-    )
-    log_data_transformation(
-        'raw-ingestion-zone', 'sales/transactions.csv',
-        'process-zone', 'sales/transactions.parquet',
-        'Standardized transaction data and converted to Parquet format'
-    )
+        # BiciMAD
+        upload_dataframe_to_minio(
+            bicimad_df,
+            'process-zone',
+            'bicimad/cleaned_bicimad.parquet',
+            format='parquet',
+            metadata={
+                'description': 'Cleaned BiciMAD data',
+                'primary_keys': [],
+                'transformations': 'Dropped unused columns, cleaned text encoding'
+            }
+        )
+        log_data_transformation(
+            'raw-ingestion-zone', 'bicimad-usos.csv',
+            'process-zone', 'bicimad/cleaned_bicimad.parquet',
+            'BiciMAD data cleaned and converted to Parquet'
+        )
 
-    # Upload processed customers
-    customer_meta = {
-        'description': 'Enriched customer data with derived fields',
-        'primary_keys': ['customer_id'],
-        'transformations': 'Added tenure calculation, customer segments, standardized countries, added regions'
-    }
-    upload_dataframe_to_minio(
-        processed_customers,
-        'process-zone',
-        'crm/customers.parquet',
-        format='parquet',
-        metadata=customer_meta
-    )
-    log_data_transformation(
-        'raw-ingestion-zone', 'crm/customers.csv',
-        'process-zone', 'crm/customers.parquet',
-        'Enriched customer data and converted to Parquet format'
-    )
+        # Parkings (rotación)
+        upload_dataframe_to_minio(
+            parkings_df,
+            'process-zone',
+            'parkings/cleaned_parking_rotation.parquet',
+            format='parquet',
+            metadata={
+                'description': 'Cleaned parking rotation data',
+                'primary_keys': [],
+                'transformations': 'Dropped unused columns, cleaned text encoding'
+            }
+        )
+        log_data_transformation(
+            'raw-ingestion-zone', 'parkings-rotacion.csv',
+            'process-zone', 'parkings/cleaned_parking_rotation.parquet',
+            'Parking rotation data cleaned and converted to Parquet'
+        )
 
-    # Upload processed products
-    product_meta = {
-        'description': 'Standardized product data with derived fields',
-        'primary_keys': ['product_id'],
-        'transformations': 'Added price tiers, standardized categories, improved availability status'
-    }
-    upload_dataframe_to_minio(
-        processed_products,
-        'process-zone',
-        'inventory/products.parquet',
-        format='parquet',
-        metadata=product_meta
-    )
-    log_data_transformation(
-        'raw-ingestion-zone', 'inventory/products.csv',
-        'process-zone', 'inventory/products.parquet',
-        'Standardized product data and converted to Parquet format'
-    )
+        # Parkings (información externa)
+        upload_dataframe_to_minio(
+            ext_df,
+            'process-zone',
+            'parkings/cleaned_parking_info.parquet',
+            format='parquet',
+            metadata={
+                'description': 'Cleaned external parking info',
+                'primary_keys': [],
+                'transformations': 'Dropped unused columns, cleaned text encoding'
+            }
+        )
+        log_data_transformation(
+            'raw-ingestion-zone', 'ext_aparcamientos_info.csv',
+            'process-zone', 'parkings/cleaned_parking_info.parquet',
+            'External parking info cleaned and converted to Parquet'
+        )
 
-    # Upload transaction-product view
-    view_meta = {
-        'description': 'Integrated view of transactions and products',
-        'source_tables': ['transactions', 'products'],
-        'join_keys': ['product_id'],
-        'transformations': 'Joined transaction data with product information'
-    }
-    upload_dataframe_to_minio(
-        transaction_product_view,
-        'process-zone',
-        'integrated/transaction_product_view.parquet',
-        format='parquet',
-        metadata=view_meta
-    )
-    log_data_transformation(
-        'multiple', 'multiple',
-        'process-zone', 'integrated/transaction_product_view.parquet',
-        'Created integrated view joining transactions and products'
-    )
+        # Municipal (distritos y estaciones)
+        for table in ['distritos', 'estaciones_transporte']:
+            parquet_path = f"{PROCESSED_DATA_PATH}/{table}.parquet"
+            df = pd.read_parquet(parquet_path)
+            upload_dataframe_to_minio(
+                df,
+                'process-zone',
+                f'municipal/{table}.parquet',
+                format='parquet',
+                metadata={
+                    'description': f'Cleaned {table} data from municipal SQL',
+                    'primary_keys': [],
+                    'transformations': f'Filtered relevant columns from {table}, cleaned text encoding'
+                }
+            )
+            log_data_transformation(
+                'raw-ingestion-zone', 'dump-bbdd-municipal.sql',
+                'process-zone', f'municipal/{table}.parquet',
+                f'{table} data processed and stored'
+            )
 
-    print("\nData processing complete!")
-    print("Note: In the Process Zone, data has been cleaned, standardized, and enriched.")
-    print("The data is now stored in Parquet format for better query performance.")
-    print("Metadata and transformation logs have been recorded in the govern-zone.")
+    except Exception as e:
+        print(f"Error uploading data to process-zone: {e}")
+        return
+
+    print("\nProcess Zone processing complete!")
+    print("Data cleaned, standardized, and saved in process-zone.")
 
 if __name__ == "__main__":
-    main()
+    main_process_zone()

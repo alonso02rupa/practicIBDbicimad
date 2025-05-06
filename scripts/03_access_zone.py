@@ -1,266 +1,145 @@
 """
-This script demonstrates preparation of analytics-ready data in the access zone.
-It aggregates and structures data from the process-zone into ready-to-consume datasets.
-
-Access Zone: Where processed data is made accessible and consumable for analytics,
-visualization, and decision support.
+Script para la Access Zone del Data Lake.
+Lee datos desde la process-zone, realiza enriquecimiento (uniones, cálculos, nuevas columnas),
+y los sube a la access-zone en formato Parquet.
 """
+
 from utils import (
     download_dataframe_from_minio,
     upload_dataframe_to_minio,
-    log_data_transformation,
-    execute_trino_query
+    log_data_transformation
 )
 import pandas as pd
+import pyarrow.parquet as pq
+import pyarrow as pa
+import numpy as np
+from pathlib import Path
 
-def create_sales_by_product_category():
-    """Create aggregated sales data by product category."""
-    print("Creating sales by product category aggregation...")
+# --- Funciones de enriquecimiento ---
 
-    # Load the transaction-product view from process zone
-    tp_view = download_dataframe_from_minio(
-        'process-zone',
-        'integrated/transaction_product_view.parquet',
-        format='parquet'
+# Objetivo 1: Enriquecimiento de datos de parkings
+def columnas_adicionales_ext(df):
+    # Añadir distrito_id y nombre_distrito (debería automatizarse con un diccionario)
+    df["distrito_id"] = [1, 1, 1, 4, 1, 1, 1, 7, 4, 3, 5, 7, 7, 4, 7]
+    df["nombre_distrito"] = ["Centro", "Centro", "Centro", "Salamanca", "Centro", "Centro", "Centro",
+                             "Chamberí", "Salamanca", "Retiro", "Chamartín", "Chamberí", "Chamberí",
+                             "Salamanca", "Chamberí"]
+    return df
+
+def join_parking_info(df_parking, df_ext):
+    df_merged = pd.merge(df_parking, df_ext, on='aparcamiento_id', how='inner')
+    df_merged['porcentaje_ocupacion'] = (df_merged['plazas_ocupadas'] / df_merged['capacidad_total']) * 100
+    df_merged['nivel_congestion'] = np.where(df_merged['porcentaje_ocupacion'] < 50, 'Bajo',
+                                            np.where(df_merged['porcentaje_ocupacion'] < 80, 'Medio', 'Alto'))
+    return df_merged
+
+# Objetivo 2: Enriquecimiento de datos municipales
+def join_municipal_data(df_estaciones, df_distritos):
+    df_joined = pd.merge(
+        df_estaciones,
+        df_distritos,
+        left_on='distrito_id',
+        right_on='id',
+        how='inner'
     )
+    df_joined.drop(columns=['id'], inplace=True, errors='ignore')
+    return df_joined
 
-    # Aggregate by category and month
-    sales_by_category = tp_view.groupby(['category', 'month_year']).agg({
-        'amount': ['sum', 'mean', 'count'],
-        'transaction_id': 'nunique'
-    }).reset_index()
+def main_access_zone():
+    print("Starting data enrichment for Access Zone...")
 
-    # Flatten the multi-level columns
-    sales_by_category.columns = [
-        'product_category', 'month_year', 'total_sales',
-        'average_sale', 'transaction_count', 'unique_transaction_count'
-    ]
+    # 1. Descargar datos desde process-zone
+    print("\nDownloading data from process-zone...")
+    try:
+        # Descargar cada archivo individualmente para identificar el problemático
+        print("Downloading parkings/cleaned_parking_rotation.parquet...")
+        parkings_df = download_dataframe_from_minio(
+            'process-zone',
+            'parkings/cleaned_parking_rotation.parquet',
+            format='parquet'  # <--- AÑADIDO AQUÍ
+        )
+        print("Downloading parkings/cleaned_parking_info.parquet...")
+        ext_df = download_dataframe_from_minio(
+            'process-zone',
+            'parkings/cleaned_parking_info.parquet',
+            format='parquet'  # <--- AÑADIDO AQUÍ
+        )
+        print("Downloading municipal/distritos.parquet...")
+        df_distritos = download_dataframe_from_minio(
+            'process-zone',
+            'municipal/distritos.parquet',
+            format='parquet'  # <--- AÑADIDO AQUÍ
+        )
+        print("Downloading municipal/estaciones_transporte.parquet...")
+        df_estaciones = download_dataframe_from_minio(
+            'process-zone',
+            'municipal/estaciones_transporte.parquet',
+            format='parquet'  # <--- AÑADIDO AQUÍ
+        )
+        print("Data downloaded successfully")
+    except Exception as e:
+        print(f"Error downloading data: {e}")
+        return
 
-    # Sort by month and category
-    sales_by_category = sales_by_category.sort_values(['month_year', 'product_category'])
+    # 2. Enriquecer datos
+    print("\nEnriching data...")
+    try:
+        # Parkings
+        ext_enriched = columnas_adicionales_ext(ext_df)
+        parking_merge = join_parking_info(parkings_df, ext_enriched)
+        print("Parking data enriched with districts, occupancy, and congestion level")
 
-    return sales_by_category
+        # Municipal
+        municipal_joined = join_municipal_data(df_estaciones, df_distritos)
+        print("Municipal data enriched with joined estaciones_transporte and distritos")
+    except Exception as e:
+        print(f"Error enriching data: {e}")
+        return
 
-def create_customer_sales_summary():
-    """Create customer-centric sales summary for analytics."""
-    print("Creating customer sales summary...")
+    # 3. Subir datos enriquecidos a access-zone
+    print("\nUploading enriched data to access-zone...")
+    try:
+        # Parkings
+        upload_dataframe_to_minio(
+            parking_merge,
+            'access-zone',
+            'parkings/enriched_parking.parquet',
+            format='parquet', # Asegúrate que esta función también maneje bien el formato al subir
+            metadata={
+                'description': 'Enriched parking data',
+                'primary_keys': [],
+                'transformations': 'Merged parking rotation and external info, calculated occupancy and congestion level, added district columns'
+            }
+        )
+        log_data_transformation(
+            'process-zone', 'parkings/cleaned_parking_rotation.parquet + parkings/cleaned_parking_info.parquet',
+            'access-zone', 'parkings/enriched_parking.parquet',
+            'Merged and enriched parking data uploaded'
+        )
 
-    # Load the data from process zone
-    transactions = download_dataframe_from_minio(
-        'process-zone',
-        'sales/transactions.parquet',
-        format='parquet'
-    )
+        # Municipal
+        upload_dataframe_to_minio(
+            municipal_joined,
+            'access-zone',
+            'municipal/enriched_estaciones_distritos.parquet',
+            format='parquet', # Asegúrate que esta función también maneje bien el formato al subir
+            metadata={
+                'description': 'Enriched municipal data: joined estaciones_transporte and distritos',
+                'primary_keys': [],
+                'transformations': 'Joined estaciones_transporte and distritos on distrito_id=id'
+            }
+        )
+        log_data_transformation(
+            'process-zone', 'municipal/distritos.parquet + municipal/estaciones_transporte.parquet',
+            'access-zone', 'municipal/enriched_estaciones_distritos.parquet',
+            'Joined municipal data enriched and stored'
+        )
+    except Exception as e:
+        print(f"Error uploading data to access-zone: {e}")
+        return
 
-    customers = download_dataframe_from_minio(
-        'process-zone',
-        'crm/customers.parquet',
-        format='parquet'
-    )
-
-    # Aggregate transactions by customer
-    customer_transactions = transactions.groupby('customer_id').agg({
-        'transaction_id': 'count',
-        'amount': ['sum', 'mean', 'min', 'max'],
-        'transaction_date': ['min', 'max']
-    }).reset_index()
-
-    # Flatten the multi-level columns
-    customer_transactions.columns = [
-        'customer_id', 'transaction_count', 'total_spend',
-        'average_spend', 'min_spend', 'max_spend',
-        'first_purchase_date', 'last_purchase_date'
-    ]
-
-    # Calculate days since last purchase
-    customer_transactions['days_since_last_purchase'] = (
-            pd.Timestamp('2024-01-31') - customer_transactions['last_purchase_date']
-    ).dt.days
-
-    # Join with customer information
-    customer_summary = pd.merge(
-        customer_transactions,
-        customers[['customer_id', 'first_name', 'last_name', 'email', 'country', 'region', 'customer_segment']],
-        on='customer_id',
-        how='left'
-    )
-
-    # Add RFM (Recency, Frequency, Monetary) segments using a simpler approach
-    # Instead of quantiles, use fixed thresholds
-
-    # Recency - days since last purchase
-    def recency_score(days):
-        if days <= 10:
-            return '3-Recent'
-        elif days <= 20:
-            return '2-Moderate'
-        else:
-            return '1-Inactive'
-
-    # Frequency - transaction count
-    def frequency_score(count):
-        if count >= 15:
-            return '3-Frequent'
-        elif count >= 10:
-            return '2-Regular'
-        else:
-            return '1-Rare'
-
-    # Monetary - total spend
-    def monetary_score(amount):
-        if amount >= 800:
-            return '3-High'
-        elif amount >= 500:
-            return '2-Medium'
-        else:
-            return '1-Low'
-
-    customer_summary['recency_score'] = customer_summary['days_since_last_purchase'].apply(recency_score)
-    customer_summary['frequency_score'] = customer_summary['transaction_count'].apply(frequency_score)
-    customer_summary['monetary_score'] = customer_summary['total_spend'].apply(monetary_score)
-
-    # Combine RFM scores
-    customer_summary['rfm_segment'] = (
-            customer_summary['recency_score'].astype(str) + '_' +
-            customer_summary['frequency_score'].astype(str) + '_' +
-            customer_summary['monetary_score'].astype(str)
-    )
-
-    return customer_summary
-
-def create_product_performance_metrics():
-    """Create product performance metrics for business intelligence."""
-    print("Creating product performance metrics...")
-
-    # Load data from process zone
-    tp_view = download_dataframe_from_minio(
-        'process-zone',
-        'integrated/transaction_product_view.parquet',
-        format='parquet'
-    )
-
-    products = download_dataframe_from_minio(
-        'process-zone',
-        'inventory/products.parquet',
-        format='parquet'
-    )
-
-    # Aggregate by product
-    product_metrics = tp_view.groupby('product_id').agg({
-        'transaction_id': 'count',
-        'amount': ['sum', 'mean']
-    }).reset_index()
-
-    # Flatten columns
-    product_metrics.columns = [
-        'product_id', 'sales_count', 'total_revenue', 'average_price'
-    ]
-
-    # Join with product information
-    product_performance = pd.merge(
-        product_metrics,
-        products[['product_id', 'product_name', 'category', 'price_tier', 'availability']],
-        on='product_id',
-        how='left'
-    )
-
-    # Calculate performance metrics
-    # Rank products by sales count within category
-    product_performance['sales_rank_in_category'] = product_performance.groupby('category')['sales_count'].rank(ascending=False)
-
-    # Calculate percentage of category sales
-    category_totals = product_performance.groupby('category')['total_revenue'].transform('sum')
-    product_performance['percent_of_category_sales'] = product_performance['total_revenue'] / category_totals * 100
-
-    return product_performance
-
-def main():
-    print("Starting data preparation for the Access Zone...")
-
-    # 1. Create analytics-ready datasets
-    sales_by_category = create_sales_by_product_category()
-    customer_summary = create_customer_sales_summary()
-    product_performance = create_product_performance_metrics()
-
-    # 2. Upload to access-zone
-    print("\nUploading analytics-ready data to access-zone...")
-
-    # Sales by category aggregation
-    sales_meta = {
-        'description': 'Monthly sales aggregated by product category',
-        'purpose': 'Sales trend analysis and reporting',
-        'refresh_frequency': 'Daily',
-        'target_users': 'Sales Analysts, Business Intelligence'
-    }
-    upload_dataframe_to_minio(
-        sales_by_category,
-        'access-zone',
-        'analytics/sales_by_category.parquet',
-        format='parquet',
-        metadata=sales_meta
-    )
-    log_data_transformation(
-        'process-zone', 'integrated/transaction_product_view.parquet',
-        'access-zone', 'analytics/sales_by_category.parquet',
-        'Created sales by category aggregation for analytics'
-    )
-
-    # Also save a CSV version for direct use in tools that prefer CSV
-    upload_dataframe_to_minio(
-        sales_by_category,
-        'access-zone',
-        'analytics/sales_by_category.csv',
-        format='csv',
-        metadata=sales_meta
-    )
-
-    # Customer summary
-    customer_meta = {
-        'description': 'Customer-centric sales summary with RFM segmentation',
-        'purpose': 'Customer segmentation, targeting, and retention analysis',
-        'refresh_frequency': 'Weekly',
-        'target_users': 'Marketing Team, Customer Success'
-    }
-    upload_dataframe_to_minio(
-        customer_summary,
-        'access-zone',
-        'analytics/customer_summary.parquet',
-        format='parquet',
-        metadata=customer_meta
-    )
-    log_data_transformation(
-        'multiple', 'multiple',
-        'access-zone', 'analytics/customer_summary.parquet',
-        'Created customer summary with RFM segmentation for marketing analysis'
-    )
-
-    # Product performance
-    product_meta = {
-        'description': 'Product performance metrics with category ranking',
-        'purpose': 'Product performance assessment and inventory planning',
-        'refresh_frequency': 'Weekly',
-        'target_users': 'Product Managers, Inventory Planners'
-    }
-    upload_dataframe_to_minio(
-        product_performance,
-        'access-zone',
-        'analytics/product_performance.parquet',
-        format='parquet',
-        metadata=product_meta
-    )
-    log_data_transformation(
-        'multiple', 'multiple',
-        'access-zone', 'analytics/product_performance.parquet',
-        'Created product performance metrics for business intelligence'
-    )
-
-    print("\nAccess Zone preparation complete!")
-    print("Note: The Access Zone now contains analytics-ready datasets optimized for:")
-    print("  - Business Intelligence dashboards")
-    print("  - Data analysis and visualization")
-    print("  - Machine learning model development")
-    print("  - Executive reporting")
-    print("\nThese datasets are structured for easy consumption by various tools and users.")
+    print("\nAccess Zone enrichment complete!")
+    print("Data enriched and saved in access-zone.")
 
 if __name__ == "__main__":
-    main()
+    main_access_zone()
