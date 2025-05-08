@@ -16,7 +16,8 @@ RUN pip install --no-cache-dir \
     python-dotenv \
     pyyaml \
     matplotlib \
-    great-expectations
+    great-expectations \
+    psycopg2-binary>=2.9.6
 
 # Set working directory
 WORKDIR /scripts
