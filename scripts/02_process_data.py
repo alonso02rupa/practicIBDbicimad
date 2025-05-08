@@ -18,16 +18,14 @@ import re
 from minio import Minio
 import io
 
-# --- Funciones de procesamiento ---
-
-# Función para limpiar cadenas y manejar codificación
+# Función para limpiar cadenas
 def clean_text_column(text):
     if isinstance(text, str):
-        # Reemplazar caracteres no válidos con un carácter de reemplazo
+        # Reemplazamos caracteres no válidos
         return text.encode('utf-8', errors='replace').decode('utf-8')
     return text
 
-# Objetivo 1: Procesamiento de datos de tráfico
+# Procesamiento de datos de tráfico
 def column_clean_traffic(df):
     df.drop(columns=['sensor_id', 'velocidad_media_kmh'], inplace=True, errors='ignore')
 
@@ -35,12 +33,12 @@ def date_format_traffic(df):
     df['hora'] = df['fecha_hora'].apply(lambda x: pd.to_datetime(x, format='%Y-%m-%d %H:%M:%S').time())
     df.drop(columns=['fecha_hora'], inplace=True, errors='ignore')
 
-# Objetivo 2: Procesamiento de datos de BiciMAD
+# Procesamiento de datos de BiciMAD
 def column_clean_bicimad(df):
     df.drop(columns=['usuario_id', 'fecha_hora_inicio', 'fecha_hora_fin', 'duracion_segundos', 'distancia_km',
                      'calorias_estimadas', 'co2_evitado_gramos'], inplace=True, errors='ignore')
 
-# Objetivo 3: Procesamiento de datos de parkings
+# Procesamiento de datos de parkings
 def column_clean_parkings(df):
     df['fecha'] = df['fecha'].to_datetime()
     df['dia_semana'] = df['fecha'].dt.day_name()
@@ -52,7 +50,7 @@ def column_clean_ext(df):
 
 # Procesamiento de scripts SQL
 def preprocess_sql_script(script):
-    script = script.replace("'Donnell", "''Donnell")  # Escapar comillas en "O'Donnell"
+    script = script.replace("'Donnell", "''Donnell")
     # Reemplazar caracteres problemáticos
     script = script.encode('utf-8', errors='replace').decode('utf-8')
     return script
@@ -80,30 +78,30 @@ def download_sql_file(bucket_name: str, object_name: str, local_path: str):
 def main_process_zone():
     print("Starting data processing for Process Zone...")
 
-    # 1. Descargar datos desde raw-ingestion-zone
+    # Descargamos datos desde raw-ingestion-zone
     print("\nDownloading data from raw-ingestion-zone...")
     try:
         trafico_df = download_dataframe_from_minio('raw-ingestion-zone', 'trafico/trafico-horario.csv')
         bicimad_df = download_dataframe_from_minio('raw-ingestion-zone', 'bicimad/bicimad-usos.csv')
         parkings_df = download_dataframe_from_minio('raw-ingestion-zone', 'aparcamiento/parkings_rotacion.csv')
         ext_df = download_dataframe_from_minio('raw-ingestion-zone', 'aparcamiento/ext_aparcamientos_info.csv')
-        # Descargar SQL como archivo temporal
+        # Descargamos SQL como archivo temporal
         sql_temp_path = "temp_dump-bbdd-municipal.sql"
         download_sql_file('raw-ingestion-zone', 'sql/dump-bbdd-municipal.sql', sql_temp_path)
-        with open(sql_temp_path, 'r', encoding='iso-8859-1') as f:  # Usar ISO-8859-1 explícitamente
+        with open(sql_temp_path, 'r', encoding='iso-8859-1') as f:
             municipal_sql = f.read()
         print("Data downloaded successfully")
     except Exception as e:
         print(f"Error downloading data: {e}")
         return
 
-    # 2. Procesar datos
+    # Procesamos datos
     print("\nProcessing data...")
 
     # Tráfico
     column_clean_traffic(trafico_df)
     date_format_traffic(trafico_df)
-    # Limpiar columnas de texto
+    # Limpiamos columnas de texto
     for col in trafico_df.select_dtypes(include=['object']).columns:
         trafico_df[col] = trafico_df[col].apply(clean_text_column)
     print("Traffic data cleaned and formatted")
@@ -123,7 +121,7 @@ def main_process_zone():
         ext_df[col] = ext_df[col].apply(clean_text_column)
     print("Parking data cleaned")
 
-    # Municipal (SQL)
+    # Municipal (SQL con SQLite)
     SQL_FILE = "dump-bbdd-municipal.sql"
     PROCESSED_DATA_PATH = "processed_sql"
     DB_PATH = "temp.db"
@@ -141,11 +139,11 @@ def main_process_zone():
         tables = [row[0] for row in cursor.fetchall()]
         print(f"Tablas creadas: {tables}")
 
-        # Procesar tablas
+        # Procesamos tablas
         if "distritos" in tables:
             df_distritos = pd.read_sql_query("SELECT * FROM distritos", conn)
             df_distritos = df_distritos[['id', 'nombre', 'densidad_poblacion']]
-            # Limpiar columnas de texto
+            # Limpiamos columnas de texto
             for col in df_distritos.select_dtypes(include=['object']).columns:
                 df_distritos[col] = df_distritos[col].apply(clean_text_column)
             df_distritos.to_parquet(f"{PROCESSED_DATA_PATH}/distritos.parquet", index=False, engine='pyarrow')
@@ -158,7 +156,7 @@ def main_process_zone():
         if "estaciones_transporte" in tables:
             df_estaciones = pd.read_sql_query("SELECT * FROM estaciones_transporte", conn)
             df_estaciones = df_estaciones[['distrito_id', 'tipo']]
-            # Limpiar columnas de texto
+            # Limpiamos columnas de texto
             for col in df_estaciones.select_dtypes(include=['object']).columns:
                 df_estaciones[col] = df_estaciones[col].apply(clean_text_column)
             df_estaciones.to_parquet(f"{PROCESSED_DATA_PATH}/estaciones_transporte.parquet", index=False, engine='pyarrow')
@@ -178,7 +176,7 @@ def main_process_zone():
         conn.close()
         return
 
-    # 3. Subir datos procesados a process-zone
+    # Subimos datos procesados a process-zone
     print("\nUploading processed data to process-zone...")
     try:
         # Tráfico
