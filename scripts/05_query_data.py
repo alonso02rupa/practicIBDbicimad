@@ -11,15 +11,20 @@ from utils import (
     execute_trino_query
 )
 import pandas as pd
-import matplotlib.pyplot as plt
-import io
 
+<<<<<<< HEAD
+
+def generate_insights(parking_data):
+    print("\n=== Parking Occupation Insights ===")
+
+=======
 def generate_insights(parking_data):
     print("\n=== Parking Occupation Insights ===")
 
     parking_data['fecha'] = pd.to_datetime(parking_data['fecha'])
     parking_data['dia_semana'] = parking_data['fecha'].dt.day_name()
 
+>>>>>>> 2b593f42f47d0cdcf71d3f003eddb820a57d8969
     # Agrupamos ocupación por aparcamiento, hora y día de la semana
     ocupacion_stats = parking_data.groupby(['aparcamiento_id', 'hora', 'dia_semana'])['porcentaje_ocupacion'].agg(['mean', 'std']).reset_index()
     ocupacion_stats.columns = ['aparcamiento_id', 'hora', 'dia_semana', 'media_ocupacion', 'variabilidad_ocupacion']
@@ -27,21 +32,26 @@ def generate_insights(parking_data):
     # Promediamos la variabilidad diaria y semanal por aparcamiento
     variabilidad_aparcamiento = ocupacion_stats.groupby('aparcamiento_id')['variabilidad_ocupacion'].mean().reset_index()
     variabilidad_aparcamiento.columns = ['aparcamiento_id', 'variabilidad_media']
+<<<<<<< HEAD
+    print(variabilidad_aparcamiento.columns)
+    # Insight 1: Top 5 aparcamientos con mayor variabilidad
+=======
 
     # Unimos con metadata del aparcamiento
     aparcamientos_analisis = pd.merge(parking_data, variabilidad_aparcamiento, on='aparcamiento_id')
 
     # Top 5 aparcamientos con mayor variabilidad
+>>>>>>> 2b593f42f47d0cdcf71d3f003eddb820a57d8969
     print("\nInsight 1: Aparcamientos con mayor variabilidad de ocupación")
-    print(aparcamientos_analisis.sort_values('variabilidad_media', ascending=False)[
+    print(variabilidad_aparcamiento.sort_values('variabilidad_media', ascending=False)[
         ['nombre', 'direccion', 'variabilidad_media']
     ].head(5))
 
     # Posible relación con ubicación geográfica 
     # Creamos bins por latitud y longitud
-    aparcamientos_analisis['zona'] = pd.cut(aparcamientos_analisis['latitud'], bins=3).astype(str) + " | " + pd.cut(aparcamientos_analisis['longitud'], bins=3).astype(str)
+    variabilidad_aparcamiento['zona'] = pd.cut(variabilidad_aparcamiento['latitud'], bins=3).astype(str) + " | " + pd.cut(variabilidad_aparcamiento['longitud'], bins=3).astype(str)
 
-    zona_variabilidad = aparcamientos_analisis.groupby('zona')['variabilidad_media'].mean().reset_index().sort_values('variabilidad_media', ascending=False)
+    zona_variabilidad = variabilidad_aparcamiento.groupby('zona')['variabilidad_media'].mean().reset_index().sort_values('variabilidad_media', ascending=False)
 
     print("\nInsight 2: Zonas con mayor variabilidad promedio")
     print(zona_variabilidad)
@@ -49,13 +59,13 @@ def generate_insights(parking_data):
     # Recomendaciones
     print("\nInsight 3: Recomendaciones")
     zona_top = zona_variabilidad.iloc[0]['zona']
-    top_aparcamiento = aparcamientos_analisis.sort_values('variabilidad_media', ascending=False).iloc[0]['nombre']
+    top_aparcamiento = variabilidad_aparcamiento.sort_values('variabilidad_media', ascending=False).iloc[0]['nombre']
     
     print(f"1. Monitorizar el aparcamiento '{top_aparcamiento}', con alta variabilidad de ocupación, para ajustar precios dinámicos o promociones.")
     print(f"2. La zona {zona_top} presenta la mayor fluctuación de uso: considerar ampliar oferta, optimizar señalización o promover alternativas.")
     print("3. Estudiar si la variabilidad está relacionada con eventos cercanos, actividad comercial o restricciones horarias.")
 
-    return aparcamientos_analisis, zona_variabilidad
+    return variabilidad_aparcamiento, zona_variabilidad
 
 
 def query_with_pandas():
@@ -76,7 +86,18 @@ def query_with_pandas():
         'parkings/cleaned_parking.parquet',
         format='parquet'
     )
+<<<<<<< HEAD
+    traffic_data = traffic_data.groupby('hora').agg({
+        'coches':'sum',
+        'motos': 'sum',
+        'camiones': 'sum',
+        'buses': 'sum',
+        'total_vehiculos': 'sum',
+        'nivel_congestion': lambda x: x.mode()[0] if not x.mode().empty else None
+    }).reset_index()
+=======
 
+>>>>>>> 2b593f42f47d0cdcf71d3f003eddb820a57d8969
     # 10 highest traffic and vehicle types records
     n = 10
     highest_traffic = traffic_data.sort_values(by='total_vehiculos', ascending=False).head(n)
@@ -90,14 +111,17 @@ def query_with_pandas():
             'buses': row['buses']
         }
         highest_vehicle = max(vehicles, key=vehicles.get)
-        
-        print(f"    Fecha y hora: {row['fecha_hora']}")
+        print(f"    Hora: {row['hora']}")
         print(f"        Total de vehículos: {row['total_vehiculos']}")
         print(f"        Nivel de congestión: {row['nivel_congestion']}")
         print(f"        Vehículo predominante: {highest_vehicle} ({vehicles[highest_vehicle]})\n")
 
+<<<<<<< HEAD
+    return traffic_data, parking_data,
+=======
     return traffic_data, parking_data
 
+>>>>>>> 2b593f42f47d0cdcf71d3f003eddb820a57d8969
 
 def query_with_trino():
     """Demonstrate using SQL via Trino to query the data lake."""
@@ -116,8 +140,8 @@ def query_with_trino():
             estacion_origen, estacion_destino
         ORDER BY 
             total_viajes DESC
-        LIMIT 10;
-        """
+        LIMIT 10
+    """
 
     query1_2 = """
         SELECT 
@@ -130,7 +154,7 @@ def query_with_trino():
         FROM 
             viajes_bicimad
         GROUP BY 
-            tipo_usuario;
+            tipo_usuario
         """
     
     # 2: ¿Cómo se relaciona la densidad de población de los distritos con la presencia de infreastrctura de transporte público? 
@@ -147,7 +171,7 @@ def query_with_trino():
             d.nombre, d.densidad_poblacion
         ORDER BY 
             d.densidad_poblacion DESC
-        """
+    """
 
     try:
         # Execute the queries using Trino
