@@ -15,11 +15,11 @@ import pyarrow as pa
 import numpy as np
 from pathlib import Path
 
-# --- Funciones de enriquecimiento ---
 
-# Objetivo 1: Enriquecimiento de datos de parkings
+
+# 1: Enriquecimiento de datos de parkings
 def columnas_adicionales_ext(df):
-    # Añadir distrito_id y nombre_distrito (debería automatizarse con un diccionario)
+    # Añadimos distrito_id y nombre_distrito
     df["distrito_id"] = [1, 1, 1, 4, 1, 1, 1, 7, 4, 3, 5, 7, 7, 4, 7]
     df["nombre_distrito"] = ["Centro", "Centro", "Centro", "Salamanca", "Centro", "Centro", "Centro",
                              "Chamberí", "Salamanca", "Retiro", "Chamartín", "Chamberí", "Chamberí",
@@ -33,7 +33,7 @@ def join_parking_info(df_parking, df_ext):
                                             np.where(df_merged['porcentaje_ocupacion'] < 80, 'Medio', 'Alto'))
     return df_merged
 
-# Objetivo 2: Enriquecimiento de datos municipales
+# 2: Enriquecimiento de datos municipales
 def join_municipal_data(df_estaciones, df_distritos):
     df_joined = pd.merge(
         df_estaciones,
@@ -48,40 +48,52 @@ def join_municipal_data(df_estaciones, df_distritos):
 def main_access_zone():
     print("Starting data enrichment for Access Zone...")
 
-    # 1. Descargar datos desde process-zone
+    # Descargamos datos desde process-zone
     print("\nDownloading data from process-zone...")
     try:
-        # Descargar cada archivo individualmente para identificar el problemático
+        # Descargamos cada archivo individualmente para identificar el problemático
         print("Downloading parkings/cleaned_parking_rotation.parquet...")
         parkings_df = download_dataframe_from_minio(
             'process-zone',
             'parkings/cleaned_parking_rotation.parquet',
-            format='parquet'  # <--- AÑADIDO AQUÍ
+            format='parquet'
         )
         print("Downloading parkings/cleaned_parking_info.parquet...")
         ext_df = download_dataframe_from_minio(
             'process-zone',
             'parkings/cleaned_parking_info.parquet',
-            format='parquet'  # <--- AÑADIDO AQUÍ
+            format='parquet' 
         )
         print("Downloading municipal/distritos.parquet...")
         df_distritos = download_dataframe_from_minio(
             'process-zone',
             'municipal/distritos.parquet',
-            format='parquet'  # <--- AÑADIDO AQUÍ
+            format='parquet'  
         )
         print("Downloading municipal/estaciones_transporte.parquet...")
         df_estaciones = download_dataframe_from_minio(
             'process-zone',
             'municipal/estaciones_transporte.parquet',
-            format='parquet'  # <--- AÑADIDO AQUÍ
+            format='parquet'
+        )
+        print("Downloading bicimad/cleaned_bicimad.parquet...")
+        df_bicimad = download_dataframe_from_minio(
+            'process-zone',
+            'bicimad/cleaned_bicimad.parquet',
+            format='parquet'
+        )
+        print("Downloading trafico/cleaned_traffic.parquet...")
+        df_traffic = download_dataframe_from_minio(
+            'process-zone',
+            'trafico/cleaned_traffic.parquet',
+            format='parquet'
         )
         print("Data downloaded successfully")
     except Exception as e:
         print(f"Error downloading data: {e}")
         return
 
-    # 2. Enriquecer datos
+    # Enriquecemos datos
     print("\nEnriching data...")
     try:
         # Parkings
@@ -96,7 +108,7 @@ def main_access_zone():
         print(f"Error enriching data: {e}")
         return
 
-    # 3. Subir datos enriquecidos a access-zone
+    # Subimos datos enriquecidos a access-zone
     print("\nUploading enriched data to access-zone...")
     try:
         # Parkings
@@ -104,7 +116,7 @@ def main_access_zone():
             parking_merge,
             'access-zone',
             'parkings/enriched_parking.parquet',
-            format='parquet', # Asegúrate que esta función también maneje bien el formato al subir
+            format='parquet', 
             metadata={
                 'description': 'Enriched parking data',
                 'primary_keys': [],
@@ -122,7 +134,7 @@ def main_access_zone():
             municipal_joined,
             'access-zone',
             'municipal/enriched_estaciones_distritos.parquet',
-            format='parquet', # Asegúrate que esta función también maneje bien el formato al subir
+            format='parquet', 
             metadata={
                 'description': 'Enriched municipal data: joined estaciones_transporte and distritos',
                 'primary_keys': [],
@@ -133,6 +145,42 @@ def main_access_zone():
             'process-zone', 'municipal/distritos.parquet + municipal/estaciones_transporte.parquet',
             'access-zone', 'municipal/enriched_estaciones_distritos.parquet',
             'Joined municipal data enriched and stored'
+        )
+
+        # Bicimad
+        upload_dataframe_to_minio(
+            df_bicimad,
+            'access-zone',
+            'bicimad/cleaned_bicimad.parquet',
+            format='parquet',
+            metadata={
+                'description': 'Cleaned Bicimad data',
+                'primary_keys': [],
+                'transformations': 'None'
+            }
+        )
+        log_data_transformation(
+            'process-zone', 'bicimad/cleaned_bicimad.parquet',
+            'access-zone', 'bicimad/cleaned_bicimad.parquet',
+            'Cleaned Bicimad data transferred'
+        )
+
+        # Traffic
+        upload_dataframe_to_minio(
+            df_traffic,
+            'access-zone',
+            'trafico/cleaned_traffic.parquet',
+            format='parquet',
+            metadata={
+                'description': 'Cleaned traffic data',
+                'primary_keys': [],
+                'transformations': 'None'
+            }
+        )
+        log_data_transformation(
+            'process-zone', 'trafico/cleaned_traffic.parquet',
+            'access-zone', 'trafico/cleaned_traffic.parquet',
+            'Cleaned traffic data transferred'
         )
     except Exception as e:
         print(f"Error uploading data to access-zone: {e}")
