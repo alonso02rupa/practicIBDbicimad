@@ -14,10 +14,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 
-def generate_insights(parking_data, ext_data):
+def generate_insights(parking_data):
     print("\n=== Parking Occupation Insights ===")
 
-    # REVISAR ESTA ADICIÓN
     parking_data['fecha'] = pd.to_datetime(parking_data['fecha'])
     parking_data['dia_semana'] = parking_data['fecha'].dt.day_name()
 
@@ -30,15 +29,15 @@ def generate_insights(parking_data, ext_data):
     variabilidad_aparcamiento.columns = ['aparcamiento_id', 'variabilidad_media']
 
     # Unimos con metadata del aparcamiento
-    aparcamientos_analisis = pd.merge(ext_data, variabilidad_aparcamiento, on='aparcamiento_id')
+    aparcamientos_analisis = pd.merge(parking_data, variabilidad_aparcamiento, on='aparcamiento_id')
 
-    # Insight 1: Top 5 aparcamientos con mayor variabilidad
+    # Top 5 aparcamientos con mayor variabilidad
     print("\nInsight 1: Aparcamientos con mayor variabilidad de ocupación")
     print(aparcamientos_analisis.sort_values('variabilidad_media', ascending=False)[
         ['nombre', 'direccion', 'variabilidad_media']
     ].head(5))
 
-    # Insight 2: Posible relación con ubicación geográfica 
+    # Posible relación con ubicación geográfica 
     # Creamos bins por latitud y longitud
     aparcamientos_analisis['zona'] = pd.cut(aparcamientos_analisis['latitud'], bins=3).astype(str) + " | " + pd.cut(aparcamientos_analisis['longitud'], bins=3).astype(str)
 
@@ -47,7 +46,7 @@ def generate_insights(parking_data, ext_data):
     print("\nInsight 2: Zonas con mayor variabilidad promedio")
     print(zona_variabilidad)
 
-    # Insight 3: Recomendaciones
+    # Recomendaciones
     print("\nInsight 3: Recomendaciones")
     zona_top = zona_variabilidad.iloc[0]['zona']
     top_aparcamiento = aparcamientos_analisis.sort_values('variabilidad_media', ascending=False).iloc[0]['nombre']
@@ -78,12 +77,6 @@ def query_with_pandas():
         format='parquet'
     )
 
-    ext_data = download_dataframe_from_minio(
-        'access-zone',
-        'ext/cleaned_ext.parquet',
-        format='parquet'
-    )
-
     # 10 highest traffic and vehicle types records
     n = 10
     highest_traffic = traffic_data.sort_values(by='total_vehiculos', ascending=False).head(n)
@@ -103,7 +96,8 @@ def query_with_pandas():
         print(f"        Nivel de congestión: {row['nivel_congestion']}")
         print(f"        Vehículo predominante: {highest_vehicle} ({vehicles[highest_vehicle]})\n")
 
-    return traffic_data, parking_data, ext_data
+    return traffic_data, parking_data
+
 
 def query_with_trino():
     """Demonstrate using SQL via Trino to query the data lake."""
@@ -172,13 +166,13 @@ def main():
     print("Demonstrating various ways to query the multi-zone data lake...")
 
     # 1. Query with Pandas - direct access to the analytical datasets
-    traffic_data, parking_data, ext_data = query_with_pandas()
+    traffic_data, parking_data = query_with_pandas()
 
     # 2. Query with Trino SQL - for more complex analytical queries
     query_with_trino()
 
     # 3. Generate business insights from the data
-    insights = generate_insights(parking_data, ext_data)
+    insights = generate_insights(parking_data)
     
 if __name__ == "__main__":
     main()
