@@ -158,7 +158,7 @@ def create_security_policy():
             'process-zone': {
                 'description': 'Storage for processed and transformed data',
                 'access_levels': {
-                    'read': ['data_engineer', 'data_scientist', 'data_analyst', 'admin'],
+                    'read': ['data_engineer', 'data_scientist', 'SQL_user', 'admin'],
                     'write': ['data_engineer', 'admin'],
                     'delete': ['admin']
                 },
@@ -168,7 +168,7 @@ def create_security_policy():
             'access-zone': {
                 'description': 'Storage for analysis-ready, business-aligned data',
                 'access_levels': {
-                    'read': ['data_engineer', 'data_scientist', 'data_analyst', 'business_user', 'admin'],
+                    'read': ['data_engineer', 'data_scientist', 'SQL_user', 'citycents', 'admin'],
                     'write': ['data_engineer', 'admin'],
                     'delete': ['admin']
                 },
@@ -234,13 +234,13 @@ def create_security_policy():
                 'description': 'Develop models and advanced analytics',
                 'members': ['ml_engineers', 'research_scientists']
             },
-            'data_analyst': {
-                'description': 'Perform business analysis and reporting',
-                'members': ['business_analysts', 'report_developers']
+            'SQL_user': {
+                'description': 'Perform SQL queries and analysis',
+                'members': ['municipal_gestors', 'data_analysts']
             },
-            'business_user': {
-                'description': 'Consume dashboards and analysis',
-                'members': ['department_managers', 'executive_team', 'functional_teams']
+            'citycents': {
+                'description': 'Citycents with no programming skills',
+                'members': ['citycents_users']
             },
             'governance_team': {
                 'description': 'Oversee data governance and quality',
