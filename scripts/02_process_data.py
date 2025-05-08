@@ -42,6 +42,8 @@ def column_clean_bicimad(df):
 
 # Objetivo 3: Procesamiento de datos de parkings
 def column_clean_parkings(df):
+    df['fecha'] = df['fecha'].to_datetime()
+    df['dia_semana'] = df['fecha'].dt.day_name()
     df.drop(columns=['plazas_libres', 'porcentaje_ocupacion'], inplace=True, errors='ignore')
 
 def column_clean_ext(df):
