@@ -45,18 +45,19 @@ services:
       - app-network
 
   postgres:
-    image: postgres:15-alpine
-    container_name: postgres
+    image: postgres:14
+    container_name: retail_dw
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+      POSTGRES_USER: dwuser
+      POSTGRES_PASSWORD: dwpassword
+      POSTGRES_DB: retail_dw
     ports:
       - "5432:5432"
     volumes:
+      - ./init:/docker-entrypoint-initdb.d
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres"]
+      test: ["CMD", "pg_isready", "-U", "dwuser"]
       interval: 10s
       timeout: 10s
       retries: 10
@@ -94,8 +95,18 @@ services:
     entrypoint: |
       /bin/bash -c "
       # Esperar a que PostgreSQL esté listo
-      until pg_isready -h postgres -U postgres; do
+      until pg_isready -h postgres -U dwuser; do
         echo 'Waiting for PostgreSQL to be ready...'
+        sleep 2
+      done;
+      # Esperar a que Trino esté listo
+      until curl -f http://trino:8080/v1/info; do
+        echo 'Waiting for Trino to be ready...'
+        sleep 2
+      done;
+      # Esperar a que MinIO esté listo
+      until curl -f http://minio:9000/minio/health/live; do
+        echo 'Waiting for MinIO to be ready...'
         sleep 2
       done;
       # Ejecutar los tres archivos Python
@@ -105,28 +116,35 @@ services:
       "
 
   superset:
-    image: apache/superset:2.1.0
+    image: apache/superset
     container_name: superset
-    environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/postgres
-      - REDIS_URL=redis://superset-redis:6379/0
-      - SUPERSET_SECRET_KEY=mysecretkey
-      - FLASK_APP=superset.app
-      - FLASK_ENV=production
-      - SUPERSET_LOAD_EXAMPLES=no
     ports:
       - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: 'your_secret_key_here'
+    volumes:
+      - ./superset_config.py:/app/superset/superset_config.py
     depends_on:
       - postgres
-      - superset-redis
     networks:
       - app-network
-    volumes:
-      - superset_home:/app/superset_home
+    command: >
+      bash -c "pip install psycopg2-binary &&
+      superset db upgrade &&
+      superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.com --password admin &&
+      superset init &&
+      superset run -p 8088 --host=0.0.0.0"
 
-  superset-redis:
-    image: redis:alpine
-    container_name: superset-redis
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+      - ADMINER_DESIGN=pepa-linha
+    depends_on:
+      - postgres
     networks:
       - app-network
 
@@ -137,4 +155,3 @@ networks:
 volumes:
   minio_data:
   postgres_data:
-  superset_home:

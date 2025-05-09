@@ -4,13 +4,10 @@ from utils import (
     upload_dataframe_to_minio,
 )
 import pandas as pd
-import psycopg2
 import numpy as np
 from datetime import datetime
-import os  # Added for directory creation
-
-# Optional: Uncomment to use SQLAlchemy instead of psycopg2
-# from sqlalchemy import create_engine
+import os
+from sqlalchemy import create_engine
 
 # Funciones de enriquecimiento
 def columnas_adicionales_ext(df):
@@ -78,21 +75,12 @@ def main_access_zone():
         print(f"Error enriching data: {e}")
         raise
 
-    # Conexión a PostgreSQL
+    # Conexión a PostgreSQL con SQLAlchemy
     try:
-        conn = psycopg2.connect(
-            host="postgres",
-            port=5432,
-            database="postgres",
-            user="postgres",
-            password="postgres"
-        )
-        cur = conn.cursor()
+        engine = create_engine('postgresql+psycopg2://postgres:postgres@postgres:5432/postgres')
+        conn = engine.connect()
+        cur = conn.connection.cursor()  # Access the underlying psycopg2 cursor for compatibility
         print("Connected to PostgreSQL")
-
-        # Optional: Use SQLAlchemy instead of psycopg2
-        # engine = create_engine('postgresql+psycopg2://postgres:postgres@postgres:5432/postgres')
-        # conn = engine.connect()
     except Exception as e:
         print(f"Error connecting to PostgreSQL: {e}")
         return
@@ -180,11 +168,11 @@ def main_access_zone():
             PRIMARY KEY (aparcamiento_id, date_time_id)
         );
         """)
-        conn.commit()
+        conn.connection.commit()  # Commit via the underlying psycopg2 connection
         print("Tables created or already exist")
     except Exception as e:
         print(f"Error creating tables: {e}")
-        conn.rollback()
+        conn.connection.rollback()
         return
 
     # Insertamos los datos en las tablas de dimensiones
@@ -243,11 +231,11 @@ def main_access_zone():
                 dt.year
             ))
 
-        conn.commit()
+        conn.connection.commit()  # Commit via the underlying psycopg2 connection
         print("Dimensions populated")
     except Exception as e:
         print(f"Error populating dimensions: {e}")
-        conn.rollback()
+        conn.connection.rollback()
         return
 
     # Insertamos datos en las tablas de hechos
@@ -287,19 +275,19 @@ def main_access_zone():
                 row['porcentaje_ocupacion']
             ))
 
-        conn.commit()
+        conn.connection.commit()  # Commit via the underlying psycopg2 connection
         print("Fact tables populated")
     except Exception as e:
         print(f"Error populating fact tables: {e}")
-        conn.rollback()
+        conn.connection.rollback()
         return
 
     # Guardamos tablas de dimensiones y hechos en formato Parquet en access-zone
     print("\nUploading dimensions and fact tables to access-zone...")
     try:
-        # Create directories for Parquet files
-        os.makedirs("access-zone/dimensions", exist_ok=True)
-        os.makedirs("access-zone/facts", exist_ok=True)
+        # Create local directories for Parquet files
+        os.makedirs("temp/dimensions", exist_ok=True)
+        os.makedirs("temp/facts", exist_ok=True)
 
         # Dimensiones
         dim_tables = {
@@ -311,15 +299,14 @@ def main_access_zone():
         }
         for table_name, file_name in dim_tables.items():
             query = f"SELECT * FROM {table_name};"
-            df = pd.read_sql_query(query, conn)  # Using psycopg2 for now
-            # Optional: Use SQLAlchemy
-            # df = pd.read_sql_query(query, conn, engine=engine)
-            parquet_path = f"access-zone/dimensions/{file_name}.parquet"
-            df.to_parquet(parquet_path, index=False, engine='pyarrow')
+            df = pd.read_sql_query(query, engine)  # Use SQLAlchemy engine
+            local_path = f"temp/dimensions/{file_name}.parquet"
+            minio_path = f"dimensions/{file_name}.parquet"  # Path in MinIO
+            df.to_parquet(local_path, index=False, engine='pyarrow')
             upload_dataframe_to_minio(
                 df,
                 'access-zone',
-                parquet_path,
+                minio_path,
                 format='parquet',
                 metadata={
                     'description': f'Dimension table {table_name} exported to Parquet',
@@ -330,9 +317,10 @@ def main_access_zone():
             )
             log_data_transformation(
                 'PostgreSQL', table_name,
-                'access-zone', parquet_path,
+                'access-zone', minio_path,
                 f'{table_name} exported to Parquet and saved in access-zone'
             )
+            os.remove(local_path)  # Clean up local file
 
         # Hechos
         fact_tables = {
@@ -342,15 +330,14 @@ def main_access_zone():
         }
         for table_name, file_name in fact_tables.items():
             query = f"SELECT * FROM {table_name};"
-            df = pd.read_sql_query(query, conn)  # Using psycopg2 for now
-            # Optional: Use SQLAlchemy
-            # df = pd.read_sql_query(query, conn, engine=engine)
-            parquet_path = f"access-zone/facts/{file_name}.parquet"
-            df.to_parquet(parquet_path, index=False, engine='pyarrow')
+            df = pd.read_sql_query(query, engine)  # Use SQLAlchemy engine
+            local_path = f"temp/facts/{file_name}.parquet"
+            minio_path = f"facts/{file_name}.parquet"  # Path in MinIO
+            df.to_parquet(local_path, index=False, engine='pyarrow')
             upload_dataframe_to_minio(
                 df,
                 'access-zone',
-                parquet_path,
+                minio_path,
                 format='parquet',
                 metadata={
                     'description': f'Fact table {table_name} exported to Parquet',
@@ -361,20 +348,22 @@ def main_access_zone():
             )
             log_data_transformation(
                 'PostgreSQL', table_name,
-                'access-zone', parquet_path,
+                'access-zone', minio_path,
                 f'{table_name} exported to Parquet and saved in access-zone'
             )
+            os.remove(local_path)  # Clean up local file
 
         # Tabla cleaned_traffic
         print("Downloading trafico/cleaned_traffic.parquet from process-zone...")
         trafico_df = download_dataframe_from_minio('process-zone', 'trafico/cleaned_traffic.parquet', format='parquet')
-        parquet_path = "access-zone/trafico/cleaned_traffic.parquet"
-        os.makedirs(os.path.dirname(parquet_path), exist_ok=True)  # Create trafico directory
-        trafico_df.to_parquet(parquet_path, index=False, engine='pyarrow')
+        local_path = "temp/trafico/cleaned_traffic.parquet"
+        minio_path = "trafico/cleaned_traffic.parquet"  # Path in MinIO
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)  # Create local trafico directory
+        trafico_df.to_parquet(local_path, index=False, engine='pyarrow')
         upload_dataframe_to_minio(
             trafico_df,
             'access-zone',
-            parquet_path,
+            minio_path,
             format='parquet',
             metadata={
                 'description': 'Cleaned and formatted traffic data',
@@ -385,9 +374,10 @@ def main_access_zone():
         )
         log_data_transformation(
             'process-zone', 'trafico/cleaned_traffic.parquet',
-            'access-zone', parquet_path,
+            'access-zone', minio_path,
             'Traffic data moved to access-zone'
         )
+        os.remove(local_path)  # Clean up local file
 
         print("Dimensions, fact tables, and cleaned_traffic successfully saved to access-zone")
     except Exception as e:

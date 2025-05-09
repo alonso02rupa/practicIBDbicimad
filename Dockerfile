@@ -17,8 +17,8 @@ RUN pip install --no-cache-dir \
     pyyaml \
     matplotlib \
     great-expectations \
-    psycopg2-binary>=2.9.6
-
+    psycopg2-binary>=2.9.6 \
+    sqlalchemy>=2.0.0
 # Set working directory
 WORKDIR /scripts
 
