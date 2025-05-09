@@ -45,7 +45,7 @@ def column_clean_parkings(df):
 
 def column_clean_ext(df):
     df.drop(columns=['direccion', 'plazas_movilidad_reducida', 'plazas_vehiculos_electricos',
-                     'horario', 'tarifa_hora_euros', 'latitud', 'longitud'], inplace=True, errors='ignore')
+                     'horario', 'tarifa_hora_euros'], inplace=True, errors='ignore')
 
 # Procesamiento de scripts SQL
 def preprocess_sql_script(script):

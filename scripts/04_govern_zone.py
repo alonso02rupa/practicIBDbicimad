@@ -22,27 +22,36 @@ def list_all_metadata():
 
     print("Retrieving metadata catalog from govern-zone-metadata:")
 
-    # Collect all metadata objects
-    objects = list(client.list_objects('govern-zone-metadata', prefix='metadata/'))
-
     metadata_catalog = {}
+    objects = list(client.list_objects('govern-zone-metadata', prefix='metadata/', recursive=True))
+
     for obj in objects:
+        object_name = obj.object_name
+
+        # Saltar si es una pseudo-carpeta
+        if object_name.endswith('/'):
+            continue
+
+        # Solo procesar archivos .json
+        if not object_name.endswith('.json'):
+            continue
+
         try:
-            # Download metadata
-            response = client.get_object('govern-zone-metadata', obj.object_name)
+            # Descargar y cargar JSON
+            response = client.get_object('govern-zone-metadata', object_name)
             metadata_json = json.loads(response.read().decode('utf-8'))
 
-            # Extract source information
+            # Extraer info del JSON
             source_bucket = metadata_json.get('source_bucket', 'unknown')
-            object_name = metadata_json.get('object_name', 'unknown')
+            object_metadata_name = metadata_json.get('object_name', 'unknown')
 
-            # Build catalog structure
             if source_bucket not in metadata_catalog:
                 metadata_catalog[source_bucket] = {}
 
-            metadata_catalog[source_bucket][object_name] = metadata_json
+            metadata_catalog[source_bucket][object_metadata_name] = metadata_json
+
         except Exception as e:
-            print(f"Error reading metadata for {obj.object_name}: {e}")
+            print(f"Error reading metadata for {object_name}: {e}")
 
     return metadata_catalog
 

@@ -169,6 +169,8 @@ def main_access_zone():
             date_time_id INT REFERENCES dim_date_time(id),
             plazas_ocupadas INT,
             porcentaje_ocupacion FLOAT,
+            latitud FLOAT,
+            longitud FLOAT,
             PRIMARY KEY (aparcamiento_id, date_time_id)
         );
         """)
@@ -277,14 +279,16 @@ def main_access_zone():
         date_time_dict = {row[1]: row[0] for row in cur.fetchall()}
         for _, row in parking_merge.iterrows():
             cur.execute("""
-            INSERT INTO fact_ocupacion_parkings (aparcamiento_id, date_time_id, plazas_ocupadas, porcentaje_ocupacion)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO fact_ocupacion_parkings (aparcamiento_id, date_time_id, plazas_ocupadas, porcentaje_ocupacion, latitud, longitud)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (aparcamiento_id, date_time_id) DO NOTHING;
             """, (
                 row['aparcamiento_id'],
                 date_time_dict[row['fecha_hora']],
                 row['plazas_ocupadas'],
-                row['porcentaje_ocupacion']
+                row['porcentaje_ocupacion'],
+                row['latitud'],
+                row['longitud']
             ))
 
         conn.connection.commit()  # Commit via the underlying psycopg2 connection
