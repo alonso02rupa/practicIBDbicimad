@@ -174,7 +174,7 @@ SELECT tipo_usuario, COUNT(*) AS total_viajes,
        ROUND(AVG(calorias_estimadas), 1) AS calorias_medias,
        ROUND(AVG(co2_evitado_gramos), 1) AS co2_medio
 FROM fact_usos_bicimad
-JOIN dim_tipos_usuario ON dim_tipos_usuario.id = fact_usos_bicimad.tipo_usuario_id
+INNER JOIN dim_tipos_usuario ON dim_tipos_usuario.id = fact_usos_bicimad.tipo_usuario_id
 GROUP BY tipo_usuario;
 ```
 
