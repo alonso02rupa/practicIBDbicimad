@@ -93,7 +93,7 @@ El modelo en PostgreSQL sigue un **esquema de estrella** con tablas de hechos y 
 - `longitud` (FLOAT)
 ---
 
-Hay algunas columnas que se hubieran haber codificado como INT ya que todos los valores que las conforman son enteros. Sin embargo, la naturaleza de la variable es un FLOAT, por lo que, en caso de que se quieran añadir más valores, se ha decidido codificarla como FLOAT.
+
 ## ⚙️ Procesos de Transformación Implementados
 
 ### `01_ingest_data.py` – Ingesta
