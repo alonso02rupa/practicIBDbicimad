@@ -217,16 +217,8 @@ ORDER BY desviacion_ocupacion DESC;
 
 ---
 
-## 📚 Detalle de las Fuentes Adicionales Incorporadas y su Valor Añadido
-
-### 📄 `ext_aparcamientos_info.csv`
-- **Contenido**: Información de parkings (nombre, capacidad, ubicación)
-- **Valor**: Enriquecimiento de datos de ocupación y contexto urbano
-
-### 🗃️ `dump-bbdd-municipal.sql`
-- **Contenido**: Datos municipales (distritos, infraestructuras, consumo)
-- **Valor**: Contexto geográfico y estructural clave para análisis urbanos
-
----
 
 ¡Con esta infraestructura, Madrid da un paso hacia una gestión de datos urbana más transparente, eficiente y participativa! 🌐🚴‍♀️🚦
+
+---
+Práctica realizada por Alonso Ruiz Palomo, Marcos Erans Batista y Juan Moreno Segura. CDIA3 2024-25
