@@ -10,17 +10,6 @@ La solución combina un **Data Lake basado en MinIO** y un **Data Warehouse en P
 
 ---
 
-## 📑 Tabla de Contenidos
-
-1. [📊 Diagrama de la Infraestructura](#diagrama-de-la-infraestructura)
-2. [🧩 Modelo de Datos Diseñado](#modelo-de-datos-diseñado)
-3. [⚙️ Procesos de Transformación Implementados](#procesos-de-transformación-implementados)
-4. [🚀 Guía de Puesta en Marcha](#guía-de-puesta-en-marcha)
-5. [🧪 Ejemplos de Uso y Soporte a las Consultas](#ejemplos-de-uso-y-soporte-a-las-consultas)
-6. [📚 Detalle de las Fuentes Adicionales Incorporadas y su Valor Añadido](#detalle-de-las-fuentes-adicionales-incorporadas-y-su-valor-añadido)
-
----
-
 ## 📊 Diagrama de la Infraestructura
 
 La infraestructura se compone de un Data Lake con MinIO dividido en tres zonas principales y un Data Warehouse en PostgreSQL conectado a Apache Superset:
