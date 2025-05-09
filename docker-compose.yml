@@ -65,19 +65,6 @@ services:
     networks:
       - app-network
 
-  trino:
-    image: trinodb/trino:403
-    container_name: trino
-    ports:
-      - "8085:8080"
-    volumes:
-      - ./config/trino/:/etc/trino/
-    depends_on:
-      - minio
-      - postgres
-    networks:
-      - app-network
-
   python-client:
     build:
       context: .
@@ -88,7 +75,6 @@ services:
       - ./data:/data
     depends_on:
       - postgres
-      - trino
       - minio
     networks:
       - app-network
@@ -97,11 +83,6 @@ services:
       # Esperar a que PostgreSQL esté listo
       until pg_isready -h postgres -U dwuser; do
         echo 'Waiting for PostgreSQL to be ready...'
-        sleep 2
-      done;
-      # Esperar a que Trino esté listo
-      until curl -f http://trino:8080/v1/info; do
-        echo 'Waiting for Trino to be ready...'
         sleep 2
       done;
       # Esperar a que MinIO esté listo
