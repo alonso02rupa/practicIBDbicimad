@@ -58,6 +58,7 @@ def main():
 
     # 1. Query with Pandas - direct access to the traffic data
     traffic_data = query_with_pandas()
+    print(traffic_data)
     
 if __name__ == "__main__":
     main()
