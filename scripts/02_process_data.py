@@ -35,8 +35,7 @@ def date_format_traffic(df):
 
 # Procesamiento de datos de BiciMAD
 def column_clean_bicimad(df):
-    df.drop(columns=['usuario_id', 'fecha_hora_inicio', 'fecha_hora_fin', 'duracion_segundos', 'distancia_km',
-                     'calorias_estimadas', 'co2_evitado_gramos'], inplace=True, errors='ignore')
+    df.drop(columns=['usuario_id', 'fecha_hora_inicio', 'fecha_hora_fin'], inplace=True, errors='ignore')
 
 # Procesamiento de datos de parkings
 def column_clean_parkings(df):
@@ -45,7 +44,7 @@ def column_clean_parkings(df):
     df.drop(columns=['plazas_libres', 'porcentaje_ocupacion'], inplace=True, errors='ignore')
 
 def column_clean_ext(df):
-    df.drop(columns=['nombre', 'direccion', 'plazas_movilidad_reducida', 'plazas_vehiculos_electricos',
+    df.drop(columns=['direccion', 'plazas_movilidad_reducida', 'plazas_vehiculos_electricos',
                      'horario', 'tarifa_hora_euros', 'latitud', 'longitud'], inplace=True, errors='ignore')
 
 # Procesamiento de scripts SQL

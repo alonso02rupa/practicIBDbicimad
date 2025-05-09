@@ -144,7 +144,11 @@ def main_access_zone():
             id_uso SERIAL PRIMARY KEY,
             estacion_origen_id INT,
             estacion_destino_id INT,
-            tipo_usuario_id INT REFERENCES dim_tipos_usuario(id)
+            tipo_usuario_id INT REFERENCES dim_tipos_usuario(id),
+            duracion_segundos FLOAT,
+            distancia_km FLOAT,
+            calorias_estimadas FLOAT,
+            co2_evitado_gramos FLOAT
         );
         """)
 
@@ -245,9 +249,17 @@ def main_access_zone():
         tipos_usuario_dict = {row[1]: row[0] for row in cur.fetchall()}
         for _, row in df_bicimad.iterrows():
             cur.execute("""
-            INSERT INTO fact_usos_bicimad (estacion_origen_id, estacion_destino_id, tipo_usuario_id)
-            VALUES (%s, %s, %s);
-            """, (row['estacion_origen'], row['estacion_destino'], tipos_usuario_dict[row['tipo_usuario']]))
+            INSERT INTO fact_usos_bicimad (estacion_origen_id, estacion_destino_id, tipo_usuario_id, duracion_segundos, distancia_km, calorias_estimadas, co2_evitado_gramos)
+            VALUES (%s, %s, %s, %s, %s, %s, %s);
+            """, (
+                row['estacion_origen'],
+                row['estacion_destino'],
+                tipos_usuario_dict[row['tipo_usuario']],
+                row['duracion_segundos'],
+                row['distancia_km'],
+                row['calorias_estimadas'],
+                row['co2_evitado_gramos']
+            ))
 
         # fact_infraestructura
         cur.execute("SELECT id, tipo_estacion FROM dim_tipos_estacion")
