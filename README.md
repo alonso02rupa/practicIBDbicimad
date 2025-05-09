@@ -162,10 +162,10 @@ traffic_data = download_dataframe_from_minio('access-zone', 'trafico/cleaned_tra
 traffic_data.groupby('hora').agg({
     'coches': 'sum', 'motos': 'sum', 'camiones': 'sum', 'buses': 'sum', 'total_vehiculos': 'sum'
 }).sort_values(by='total_vehiculos', ascending=False).head(10)
-
+```
+```python
 Para ver la consulta hecha del objetivo 1, ejecutar en otra terminal el script 05_query_data.py:
 docker exec -it python-client python 05_query_data.py
-
 ```
 
 ---
