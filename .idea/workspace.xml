@@ -6,12 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="6e12a3c9-3849-497d-bd04-4367a9bedcd4" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.name" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.name" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/practicIBDbicimad.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/practicIBDbicimad.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/01_ingest_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/01_ingest_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/02_process_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/02_process_data.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/03_access_zone.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/03_access_zone.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/temp.db" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/temp.db" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

@@ -46,11 +46,11 @@ services:
 
   postgres:
     image: postgres:14
-    container_name: retail_dw
+    container_name: postgres
     environment:
-      POSTGRES_USER: dwuser
-      POSTGRES_PASSWORD: dwpassword
-      POSTGRES_DB: retail_dw
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     ports:
       - "5432:5432"
     volumes:
