@@ -2,8 +2,8 @@
 # 🏙️ Proyecto de Infraestructura de Datos para Madrid
 
 Este repositorio contiene la implementación de una infraestructura de datos integrada para la ciudad de Madrid, diseñada para tres tipos de usuario:  
-👨‍🔬 Científicos de datos  
-🏛️ Gestores municipales  
+👨‍🔬 Científicos de datos expertos en python
+🏛️ Gestores municipales conocedores de SQL
 👥 Ciudadanos y asociaciones vecinales  
 
 La solución combina un **Data Lake basado en MinIO** y un **Data Warehouse en PostgreSQL**, habilitando análisis avanzados, consultas SQL y visualizaciones intuitivas sobre datos de movilidad, participación ciudadana e infraestructura urbana.
