@@ -112,8 +112,8 @@ El modelo en PostgreSQL sigue un **esquema de estrella** con tablas de hechos y 
 
 ### 1️⃣ Clonar el repositorio
 ```bash
-git clone https://github.com/tu_usuario/tu_repositorio.git
-cd tu_repositorio
+git clone https://github.com/alonso02rupa/practicIBDbicimad.git
+cd practicIBDbicimad.git
 ```
 
 ### 2️⃣ Requisitos
@@ -121,7 +121,7 @@ cd tu_repositorio
 
 ### 3️⃣ Levantar los servicios
 ```bash
-docker-compose up -d
+docker-compose up
 ```
 
 Esto iniciará MinIO, PostgreSQL, Superset y ejecutará los scripts automáticamente.
@@ -131,12 +131,8 @@ Esto iniciará MinIO, PostgreSQL, Superset y ejecutará los scripts automáticam
 - Usuario: `admin`  
 - Contraseña: `admin`
 
-### 5️⃣ Configurar PostgreSQL en Superset
-- URI: `postgresql+psycopg2://postgres:postgres@localhost:5432/postgres`
-
-### 6️⃣ Verificar los datos
+### 5️⃣ Verificar los datos
 - MinIO: http://localhost:9000 (usuario/contraseña: `minioadmin`)
-- PostgreSQL: `localhost:5432`
 
 ---
 
@@ -217,8 +213,6 @@ ORDER BY desviacion_ocupacion DESC;
 
 ---
 
-
-¡Con esta infraestructura, Madrid da un paso hacia una gestión de datos urbana más transparente, eficiente y participativa! 🌐🚴‍♀️🚦
 
 ---
 Práctica realizada por Alonso Ruiz Palomo, Marcos Erans Batista y Juan Moreno Segura. CDIA3 2024-25
